@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  booking-service:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: 
+      # Other environment variables
+    depends_on:
+      - database
+
+  database:
+    image: postgres:16.3-alpine3.20
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: booking-service-db

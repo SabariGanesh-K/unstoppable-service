@@ -1,0 +1,398 @@
+CREATE TABLE SeatMaster
+(
+    SeatId  SERIAL PRIMARY KEY,
+    seat_row SMALLINT,
+    section CHAR(1),
+    seat_number VARCHAR(5),
+    seat_type VARCHAR(10)
+);
+INSERT INTO SeatMaster (seat_row, section, seat_number, seat_type)
+SELECT
+    sr.seat_row,
+    s.section,
+    s.section || '-' || CAST(ROW_NUMBER() OVER (PARTITION BY s.section ORDER BY sr.seat_row, s.section, sn.seat_number) AS TEXT) AS seat_number,
+    CASE WHEN sr.seat_row <= 2 THEN 'Gold' ELSE 'Silver' END AS seat_type
+FROM
+    (VALUES (1), (2), (3), (4), (5)) AS sn(seat_number)
+CROSS JOIN
+    (VALUES ('A'), ('B')) AS s(section)
+CROSS JOIN
+    (VALUES (1), (2), (3), (4), (5), (6), (7), (8), (9), (10)) AS sr(seat_row)
+ORDER BY seat_row, section;
+
+SELECT * FROM SeatMaster;
+
+
+
+CREATE TABLE SeatMaster (
+    SeatId SERIAL PRIMARY KEY,
+    seat_row SMALLINT,
+    section CHAR(1),
+    seat_number VARCHAR(5)
+);
+INSERT INTO SeatMaster (seat_row, section, seat_number)
+SELECT
+    sr.seat_row,
+    s.section,
+    s.section || '-' || CAST(ROW_NUMBER() OVER (ORDER BY sr.seat_row, s.section, sn.seat_number) AS TEXT) AS seat_number
+FROM
+    (VALUES (1), (2), (3), (4), (5), (6), (7), (8), (9), (10), (11)) AS sr(seat_row)
+CROSS JOIN
+    (SELECT 'A' AS section, 4 AS num_seats UNION ALL SELECT 'B', 3) s
+CROSS JOIN
+    generate_series(1, s.num_seats) sn(seat_number)
+ORDER BY
+    sr.seat_row, s.section, sn.seat_number;
+
+SELECT * FROM SeatMaster;
+
+
+//final
+
+CREATE TABLE SeatMaster (
+    SeatId SERIAL PRIMARY KEY,
+    seat_row SMALLINT,
+    section CHAR(1),
+    seat_number VARCHAR(5)
+);
+INSERT INTO SeatMaster (seat_row, section, seat_number)
+SELECT
+    sr.seat_row,
+    s.section,
+    s.section || '-' || CAST(ROW_NUMBER() OVER (ORDER BY sr.seat_row, s.section, sn.seat_number) AS TEXT) AS seat_number
+FROM
+    (VALUES (1), (2), (3), (4), (5), (6), (7), (8), (9), (10), (11)) AS sr(seat_row)
+CROSS JOIN
+    (SELECT 'A' AS section, 4 AS num_seats UNION ALL SELECT 'B', 3) s
+CROSS JOIN
+    generate_series(1, s.num_seats) sn(seat_number)
+ORDER BY
+    sr.seat_row, s.section, sn.seat_number;
+
+INSERT INTO SeatMaster (seat_row, section, seat_number)
+VALUES
+    (12, 'A', 'A78'),
+    (12, 'A', 'A79'),
+    (12, 'A', 'A80');
+SELECT * FROM SeatMaster;
+
+
+
+--- with booojinggggg
+
+
+CREATE TABLE SeatMaster (
+    SeatId SERIAL PRIMARY KEY,
+    seat_row SMALLINT,
+    section CHAR(1),
+    seat_number VARCHAR(5)
+);
+INSERT INTO SeatMaster (seat_row, section, seat_number)
+SELECT
+    sr.seat_row,
+    s.section,
+    s.section || '-' || CAST(ROW_NUMBER() OVER (ORDER BY sr.seat_row, s.section, sn.seat_number) AS TEXT) AS seat_number
+FROM
+    (VALUES (1), (2), (3), (4), (5), (6), (7), (8), (9), (10), (11)) AS sr(seat_row)
+CROSS JOIN
+    (SELECT 'A' AS section, 4 AS num_seats UNION ALL SELECT 'B', 3) s
+CROSS JOIN
+    generate_series(1, s.num_seats) sn(seat_number)
+ORDER BY
+    sr.seat_row, s.section, sn.seat_number;
+
+INSERT INTO SeatMaster (seat_row, section, seat_number)
+VALUES
+    (12, 'A', 'A78'),
+    (12, 'A', 'A79'),
+    (12, 'A', 'A80');
+    --This is the booking table
+CREATE TABLE SeatBooking (
+    BookingId SERIAL PRIMARY KEY,
+    BookingDate DATE NOT NULL,
+    ShowTime VARCHAR(25) NOT NULL,
+    CustomerName VARCHAR(256) NOT NULL,
+    BookedAtDateTime TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    SeatId INT REFERENCES SeatMaster(SeatId),
+    Amount DECIMAL(18,2),
+    CurrentStatus VARCHAR(25)
+);
+
+INSERT INTO SeatBooking (
+    BookingDate, ShowTime, CustomerName, BookedAtDateTime, SeatId, Amount, CurrentStatus
+)
+SELECT
+    '2021-04-02'::DATE AS BookingDate,
+    'Evening 6-9' AS ShowTime,
+    CONCAT('Customer - ', RIGHT('00' || FLOOR(RANDOM() * 60)::TEXT, 2)) AS CustomerName,
+    NOW() AS BookedAtDateTime,
+    SeatId AS SeatId,
+    250,
+    'Booked' AS CurrentStatus
+FROM SeatMaster
+WHERE SeatMaster.seat_number NOT IN (
+    'A-6', 'A-7', 'A-8', 'A-9', 'A-10',
+    'B-26', 'B-27', 'B-28', 'B-29', 'B-30',
+    'A-38', 'A-39', 'A-40', 'B-36', 'B-37',
+    'B-44', 'B-45', 'A-46', 'A-47', 'A-48'
+);
+
+ SELECT * FROM SeatMaster;
+SELECT * FROM SeatBooking ORDER BY SeatId;
+
+
+
+
+
+--wo0rks for selection
+
+  WITH AvailableSeats AS (
+      SELECT
+          '2021-04-02'::DATE AS BookingDate,
+          sm.SeatId,
+          sm.seat_row,
+          sm.section,
+          sm.seat_number,
+          CASE WHEN sb.SeatId IS NULL THEN 'Available' ELSE 'Booked' END AS CurrentStatus
+      FROM SeatMaster sm
+      LEFT JOIN SeatBooking sb ON sm.SeatId = sb.SeatId AND sb.BookingDate = '2021-04-02' AND sb.CurrentStatus = 'Booked'
+      WHERE sb.SeatId IS NULL
+  )
+  SELECT  *
+  FROM SeatMaster sm
+  JOIN (
+      SELECT
+          a.BookingDate,
+          a.SeatId,
+          COUNT(*) AS Cnt
+      FROM AvailableSeats a
+      JOIN AvailableSeats b ON b.BookingDate = a.BookingDate AND b.SeatId BETWEEN a.SeatId AND a.SeatId + 5 - 1
+      GROUP BY a.BookingDate, a.SeatId
+      HAVING COUNT(*) >= 5
+  ) BookingData ON sm.SeatId BETWEEN BookingData.SeatId AND BookingData.SeatId + 5 - 1
+  WHERE BookingDate = '2021-04-02';
+
+
+    A.BookingDate, 
+    A.SeatId
+  HAVING 
+    COUNT(*) >= 5
+) BookingData 
+ON 
+  sm.SeatId >= BookingData.SeatId 
+AND 
+  sm.SeatId <= BookingData.SeatId + 4
+WHERE 
+  BookingDate = '2021-04-02'
+ ORDER BY sm.SeatId;
+
+
+
+
+-- seat numbr alonee
+
+  WITH AvailableSeats AS (
+      SELECT
+          '2021-04-02'::DATE AS BookingDate,
+          sm.SeatId,
+          sm.seat_row,
+          sm.section,
+          sm.seat_number,
+          CASE WHEN sb.SeatId IS NULL THEN 'Available' ELSE 'Booked' END AS CurrentStatus
+      FROM SeatMaster sm
+      LEFT JOIN SeatBooking sb ON sm.SeatId = sb.SeatId AND sb.BookingDate = '2021-04-02' AND sb.CurrentStatus = 'Booked'
+      WHERE sb.SeatId IS NULL
+  )
+  SELECT  sm.seat_number
+  FROM SeatMaster sm
+  JOIN (
+      SELECT
+          a.BookingDate,
+          a.SeatId,
+          COUNT(*) AS Cnt
+      FROM AvailableSeats a
+      JOIN AvailableSeats b ON b.BookingDate = a.BookingDate AND b.SeatId BETWEEN a.SeatId AND a.SeatId + 5 - 1
+      GROUP BY a.BookingDate, a.SeatId
+      HAVING COUNT(*) >= 5
+  ) BookingData ON sm.SeatId BETWEEN BookingData.SeatId AND BookingData.SeatId + 5 - 1
+  WHERE BookingDate = '2021-04-02';
+
+
+    A.BookingDate, 
+    A.SeatId
+  HAVING 
+    COUNT(*) >= 5
+) BookingData 
+ON 
+  sm.SeatId >= BookingData.SeatId 
+AND 
+  sm.SeatId <= BookingData.SeatId + 4
+WHERE 
+  BookingDate = '2021-04-02'
+ ORDER BY sm.SeatId;
+
+
+
+--BACKUP 
+      WITH AvailableSeats AS (
+            SELECT
+                '2021-04-02'::DATE AS BookingDate,
+                sm.SeatId,
+                sm.seat_row,
+                sm.section,
+                sm.seat_number,
+                CASE WHEN sb.SeatId IS NULL THEN 'Available' ELSE 'Booked' END AS CurrentStatus
+            FROM SeatMaster sm
+            LEFT JOIN SeatBooking sb ON sm.SeatId = sb.SeatId AND sb.BookingDate = '2021-04-02' AND sb.CurrentStatus = 'Booked'
+            WHERE sb.SeatId IS NULL
+        )
+        SELECT  *
+        FROM SeatMaster sm
+        JOIN (
+            SELECT
+                a.BookingDate,
+                a.SeatId,
+                COUNT(*) AS Cnt
+            FROM AvailableSeats a
+            JOIN AvailableSeats b ON b.BookingDate = a.BookingDate AND b.SeatId BETWEEN a.SeatId AND a.SeatId + ${req.params.n} - 1
+            GROUP BY a.BookingDate, a.SeatId
+            HAVING COUNT(*) >= ${req.params.n}
+        ) BookingData ON sm.SeatId BETWEEN BookingData.SeatId AND BookingData.SeatId + ${req.params.n} - 1
+        WHERE BookingDate = '2021-04-02';
+        
+
+
+
+
+        --hehe
+            WITH AvailableSeats AS (
+  SELECT '2021-04-02'::DATE AS BookingDate, 
+         sm.SeatId, 
+         sm.seat_row, 
+         sm.section, 
+         sm.seat_number, 
+         CASE 
+           WHEN sb.SeatId IS NULL THEN 'Available' 
+           ELSE 'Booked' 
+         END AS CurrentStatus
+  FROM SeatMaster sm 
+  LEFT JOIN SeatBooking sb 
+    ON sm.SeatId = sb.SeatId 
+    AND sb.BookingDate = '2021-04-02' 
+    AND sb.CurrentStatus = 'Booked'
+  WHERE sb.SeatId IS NULL
+),
+ConsecutiveSeats AS (
+  SELECT * 
+  FROM SeatMaster sm 
+  JOIN (
+    SELECT a.BookingDate, 
+           a.SeatId, 
+           COUNT(*) AS Cnt 
+    FROM AvailableSeats a 
+    JOIN AvailableSeats b 
+      ON b.BookingDate = a.BookingDate 
+      AND b.SeatId BETWEEN a.SeatId AND a.SeatId + ${5} - 1 
+    GROUP BY a.BookingDate, 
+             a.SeatId 
+    HAVING COUNT(*) >= ${5}
+  ) BookingData 
+    ON sm.SeatId BETWEEN BookingData.SeatId AND BookingData.SeatId + ${5} - 1 
+  WHERE BookingDate = '2021-04-02'
+),
+RandomAvailableSeats AS (
+  SELECT * 
+  FROM AvailableSeats 
+  ORDER BY RANDOM() 
+  LIMIT ${5}
+)
+SELECT * 
+FROM ConsecutiveSeats 
+UNION ALL 
+SELECT * 
+FROM RandomAvailableSeats 
+WHERE NOT EXISTS (
+  SELECT 1 
+  FROM ConsecutiveSeats
+);
+
+
+-- with edge case
+
+WITH 
+AvailableSeats AS (
+  SELECT 
+    '2021-04-02'::DATE AS BookingDate, 
+    sm.SeatId, 
+    sm.seat_row, 
+    sm.section, 
+    sm.seat_number, 
+    CASE 
+      WHEN sb.SeatId IS NULL THEN 'Available' 
+      ELSE 'Booked' 
+    END AS CurrentStatus
+  FROM SeatMaster sm 
+  LEFT JOIN SeatBooking sb 
+    ON sm.SeatId = sb.SeatId 
+    AND sb.BookingDate = '2021-04-02' 
+    AND sb.CurrentStatus = 'Booked'
+  WHERE sb.SeatId IS NULL
+),
+ConsecutiveSeats AS (
+  SELECT 
+    sm.SeatId, 
+    sm.seat_row, 
+    sm.section, 
+    sm.seat_number, 
+    BookingData.BookingDate
+  FROM SeatMaster sm 
+  JOIN (
+    SELECT 
+      a.BookingDate, 
+      a.SeatId, 
+      COUNT(*) AS Cnt 
+    FROM AvailableSeats a 
+    JOIN AvailableSeats b 
+      ON b.BookingDate = a.BookingDate 
+      AND b.SeatId BETWEEN a.SeatId AND a.SeatId + 5 - 1 
+    GROUP BY 
+      a.BookingDate, 
+      a.SeatId 
+    HAVING 
+      COUNT(*) >= 5
+  ) BookingData 
+    ON sm.SeatId BETWEEN BookingData.SeatId AND BookingData.SeatId + 5 - 1 
+  WHERE 
+    BookingDate = '2021-04-02'
+),
+RandomAvailableSeats AS (
+  SELECT 
+    SeatId, 
+    seat_row, 
+    section, 
+    seat_number, 
+    BookingDate
+  FROM (
+    SELECT 
+      SeatId, 
+      seat_row, 
+      section, 
+      seat_number, 
+      BookingDate,
+      ROW_NUMBER() OVER (ORDER BY RANDOM()) AS row_num
+    FROM AvailableSeats
+  ) AS subquery
+  WHERE row_num <= 5
+)
+SELECT * 
+FROM ConsecutiveSeats 
+UNION ALL 
+SELECT * 
+FROM RandomAvailableSeats 
+WHERE NOT EXISTS (
+  SELECT 1 
+  FROM ConsecutiveSeats
+);
+
+
+-- available n seats edge
